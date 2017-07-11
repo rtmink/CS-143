@@ -1,0 +1,20 @@
+Ryan Trihernawan
+
+UID 904-063-131
+
+CS143 - Lab 2 Writeup
+
+***
+I submitted the lab one day late so I am using my FIRST slip day chance.
+***
+
+
+I used a simple nested loops join as suggested by the spec because it is the simplest solution for now. I will implement a more intelligent way to join in the next lab. 
+
+For both IntegerAggregator and StringAggregator classes, I used ArrayList of Field to represent the fields when there is no grouping and HashMap which maps a Field to ArrayList of Field when there exists a group-by field. I deferred the merging of the tuples in the iterator function because it is more performant and efficient to perform the aggregation all at once when all the values of the fields are known. For instance, taking the average of all the fields when they are all known results in only one division, while taking the average every time a field is provided results in division as many as the number of fields provided. Other operations follow the same reasoning. 
+
+For HeapFile class, I used RandomAccessFile in writePage function similarly to what I did in the readPage function because it allows one to access the file at a specific offset. This offset corresponds to the location of a page. However, I used FileOutputStream to write a new page because it provides a convenient way to append to the end of the file, which is exactly where a new page should be added. One important point I learned after creating a new page is that I needed to refetch the page with required permissions so that I could insert a tuple into the page. deleteTuple is much more simpler than insertTuple because one does not have to worry about not having enough pages. 
+
+Delete and Insert classes are really simple since they rely on BufferPool functions with the same names. One thing interesting I discovered the hard way was I did not return null if fetchNext is called after the it is called once in Delete because the corresponding comments did not mention it, although I understand that I should have logically decipher such implementation.
+
+I made several significant improvements to BufferPool class by using a more sophisticated way to implement LRU eviction policy. I used a doubly-linked list which implements page id as the pointer to another page. I keep track of the newest and the oldest page in the ConcurrentHashMap. The map itself uses the page id as the key and a my custom class called PageNode that serves as the structure containing page ids of the next and previous pages as well as the page itself. Every time a buffer pool is full, I simply find the oldest page and delete it. Adding a new page is super easy because I have the page id of the previously newest page. Updating the next and previous page ids are very simple as well, allowing an elegant way to keep track of the pages according to its access time without actually storing any information about the access time. 
