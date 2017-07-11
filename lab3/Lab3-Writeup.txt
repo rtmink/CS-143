@@ -1,0 +1,171 @@
+CS143 - Lab 3 Writeup
+
+Ryan Trihernawan
+904-063-131
+
+****I still have 3 slip days left***
+So I am only using 2 for this lab.
+
+===
+
+Life of a query in SimpleDB
+
+1. simpledb.Parser.main()
+> The query starts here
+> Calls Parser.start()
+
+2. simpledb.Parser.start()
+> Add tables to database
+> Compute statistics on each table by calling TableStats.computeStatistics()
+> It either reads an input file containing queries or interactively from the command 
+line by calling Parser.processNextStatement()
+
+3. simpledb.Parser.processNextStatement()
+> Read the statement/query by calling ZqlParser.readStatement()
+> Call appropriate method to handle either Inserts, Deletes, or Queries
+> If a query, call Parser.handleQueryStatement() => (no. 4)
+> If the query is valid and exists, execute it by calling Query.execute() => (8)
+
+4. simpledb.Parser.handleQueryStatement()
+> Create the query
+> Create the logical plan based on the query by calling Parser.parseQueryLogicalPlan => (5)
+> Create the physical plan by calling LogicalPlan.physicalPlan() => (6)
+
+5. simpledb.Parser.parseQueryLogicalPlan
+> Walk through tables in the FROM clause
+> Parse the WHERE clause, creating Filter and Join nodes as needed
+> Look for GROUP BY fields
+> Iterate the SELECT list, choose aggregates, and check for query validity
+> Sort data
+> Return the logical plan to Parser.handleQueryStatement() => (4)
+
+6. simpledb.LogicalPlan.physicalPlan()
+> Convert the logical plan into a physical plan
+> Find the optimal plan by calling JoinOptimizer.orderJoins()
+
+7. simpledb.JoinOptimizer.orderJoins
+> Look at the explanation of the Join Ordering below!!!
+
+8. simpledb.Query.execute()
+> Execute the query
+
+===
+
+1. Filter Selectivity estimation: I followed the algorithm specified on the spec. It works as follows:
+
+I create buckets whose size is determined by taking the difference between the max and min values 
+divided by the number of buckets. This bucket size will determine the bucket a particular value 
+between the max and min values will go to. Each bucket also counts the number of tuples in it
+so that each bucket can determine its own distribution of tuples. 
+
+To estimate the selectivity for a particular pair of value and operator, I only need to do so for
+greater than (>) and equality (=) operators because all other operators (<=, =>, <, and !=) can
+are either the combinations of or the inverse of the two operators.
+
+For the equality (=) selectivity, I return 0 if the value is outside the range of min and max values.
+Otherwise, I calculate the number of tuples in the bucket with the particular value. This is the uniform
+distribution of the tuples with the value in the bucket. Then I divide this value by the total number of
+tuples in the table to get the uniform distribution of the tuples with the particular value in the table.
+
+For the greater than (>) selectivity, I return 1 if the given value is less than the min value and return
+0 if the value is greater than the max. Otherwise, I calculate two different values that comprise the
+final value for the selectivity. The first one is the contribution of the tuples whose value is greater 
+than the given value in the bucket where the given value belongs. This contribution is the 
+range from the greatest value in the bucket to the given value, exclusive, multiplied by the
+fraction of the tuples in the same bucket in the table. The second contribution is the total fractions
+of the tuples in all the buckets whose value is greater than the given value. 
+
+2. Join Selectivity estimation: I followed the algorithm specified on the spec. It works as follows:
+
+There are two types of joins:
+
+a. Range Scans:
+
+This is for operators (<, >, <=, >=, !=) such that range scans have to be performed to obtain the desired 
+tuples. For each of the two tuples from the two tables, I calculate their average selectivity. I implement
+the function “avgSelectivity” in both “TableStats.java” and “IntHistogram.java” to calculate this value.
+It does so by summing the selectivity of all the tuples in each bucket. Assuming uniform distribution, the 
+selectivity of the tuples in each bucket is simply the number of tuples in the bucket divided by the 
+number of buckets. Multiplication of the selectivity of the two fields and the cardinalities of the two 
+tables is the join cardinality of the two tables.
+
+b. Equality:
+
+Since there is no scanning, I can take a much simpler approach to estimate the join cardinality of the 
+two tables. If both of the tables have primary keys on the given fields, the join cardinality is the minimum 
+of the cardinalities of the two tables. Otherwise, it is the maximum of the two cardinalities of the two 
+tables.
+
+3. Join Ordering: 
+
+I used Selinger’s algorithm as specified in the spec. This algorithm is efficient because it only 
+considers the left-deep plans, significantly reducing the number of possible plans. Firstly, I iterate
+the power set of the join nodes. A power set is the set of all the subsets of a set. These subsets 
+have sizes ranging from 0 to the cardinality of the set. In this algorithm we only consider all
+the subsets starting with size 1 because subset of size 0 does not contribute anything to finding 
+the best plan. Secondly, for each of the subsets, I find the best plan by considering all the
+possible left-deep joins of the tables. The best plan of the subsets of a particular size is based
+on the best plan of the smaller subsets, yielding the best possible plan for varying left-deep 
+combinations of tables. 
+
+Since the function “computeCostAndCardOfSubplan” might return null, it is possible that there 
+is no best plan for particular subsets. Thus, I initialize the best plan’s cost to the max value 
+of Double so that I can check whether the returned subplan is not the empty plan I start
+with. Lastly, I extract the best join plan from the cache. If there is none, I simply use the 
+default joins provided in the class. If “explain” is true, I simply call the function “printJoins”.
+
+===
+
+I did the first query for 0.001 because it is the smallest database.
+
+This is what I saw:
+
+œÄ(d.fname,d.lname),card:3008
+                            |
+                            ‚®ù(a.id=c.pid),card:3008
+  __________________________|___________________________
+  |                                                    |
+  œÉ(a.lname=Spicer),card:1                           ‚®ù(m.mid=c.mid),card:3008
+  |                                    ________________|_________________
+  œÉ(a.fname=John),card:1              |                                |
+  |                                   ‚®ù(d.id=m.did),card:278          |
+  |                           _________|_________                      |
+  |                           |                 |                    scan(Casts c)
+scan(Actor a)               scan(Director d)  scan(Movie_Director m)
+
+This plan makes sense because the table on the left has cardinality 1, reducing the I/O cost 
+in joining them with other tables. 
+
+I did my second query for 0.001 as well:
+
+Select m.name, d.fname, g.genre 
+from Movie m, Director d, Movie_Director md, Genre g 
+where m.id=md.mid and d.id=md.did and g.mid=m.id and d.fname='Robert' and g.genre='Drama';
+
+This is what I saw:
+
+œÄ(m.name,d.fname,g.genre),card:1
+                        |
+                       ‚®ù(g.mid=m.id),card:1
+  ______________________|______________________
+  |                                           |
+ œÉ(g.genre=Drama),card:1                    ‚®ù(d.id=md.did),card:1
+  |                          _________________|__________________
+  |                          |                                  |
+  |                         œÉ(d.fname=Robert),card:1          ‚®ù(m.id=md.mid),card:278
+  |                          |                           _______|________
+  |                        scan(Director d)              |              |
+scan(Genre g)                                          scan(Movie m)  scan(Movie_Director md)
+
+m.name  d.fname g.genre 
+
+This plan also makes sense because the table on the left always has a cardinality smaller than
+the one to its right. In this case We happen to get most tables with just one cardinality,
+giving a very optimal plan.
+
+
+
+
+
+
+
