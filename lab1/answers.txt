@@ -1,0 +1,83 @@
+CS143
+Lab 1 - Writeup
+
+Ryan Trihernawan
+UID 904-063-131
+
+***
+
+I followed the rough outline on the spec because it allowed me to build the small parts of the program that other parts of the program would rely on. Moreover, I gained more understanding with the internal mechanism of a database by working on the smaller parts of the program first. 
+
+
+#TupleDesc
+
+I used an ArrayList to store the fields in TupleDesc because it provides a more convenient way to iterate the fields than a regular array. 
+
+For TupleDesc constructors, I throw “IllegalArgumentException” when the desired number of fields is less than one. Such implementation allows users or testers to notice the problem quickly.
+
+All the methods that allow users to retrieve field info by field index throw “NoSuchElementException” if the index is out of bounds (invalid).
+
+I do not use TupleDesc as keys for HashMap because TupleDesc is not unique. For instance, two tables can have the same number and types of fields, but have different table names. Thus, the table name, not TupleDesc, determines whether a table is unique. Of course, table id is more appropriate to uniquely identify a table, but table name itself must be unique. 
+
+“equals” method does the checks in the following order:
+1. The provided object has to be an instance of TupleDesc
+2. The provided object has to have the same size as the current TupleDesc instance
+3. Lastly, the fields with the same index in both the provided object and the current TupleDesc instance have to be equal
+
+
+#Tuple
+
+As indicated in the beginning of the Tuple.java, Array should be used in the implementation of the Tuple class, so I used an Array to store the fields. 
+
+All the methods that allow users to supply a field index throw “NoSuchElementException” if the index is out of bounds (invalid).
+
+
+#Catalog
+
+As indicated in the beginning of the Catalog.java, ConcurrentHashMap should be used, so I used a ConcurrentHashMap to map tableID to table metadata because it provides fast access to particular table. I implemented a private nested class in Catalog called Metadata which holds the table metadata such as file, name, and key field. This class provides a clear abstraction for storing table metadata. 
+
+Table id is a natural choice for the keys in the ConcurrentHashMap because it uniquely identifies a table (in this case, it is the table’s metadata).
+
+
+#BufferPool
+
+As indicated in the beginning of the file, ConcurrentHashMap is recommended for storing the pages because it supports concurrent retrievals and updates. Page ID maps to the page. I also keep a private instance for the maximum number of pages allowed. 
+
+Page id is a natural choice for the keys in the ConcurrentHashMap because it uniquely identifies a page. 
+
+
+#HeapPageId
+
+For the hashCode, I converted both the table id and page number to strings before concatenating them. Apparently the concatenation of the tableId and page number is too long for an int, so I used Long instead. However, since I needed to return an int, I return the hashCode of the Long.
+
+We can use “pageNumber” instead of the “hashCode”, but “hashCode” also uniquely identifies a page.
+
+
+#RecordId
+
+As written in the textbook, a record id consists of a page number and slot number, thus the logical implementation of the hashCode would be the concatenation of the page id’s hashCode and the tuple number.  Like the hashCode for the HeapPageId, I converted both the page id’s hash code and tuple number to strings before concatenating them. Since, the concatenation always results in a number that fits in an integer, we do not need to cast it to Long like HeapPageId. 
+
+
+#HeapPage
+
+For “isSlotUsed” method, I divided the slot number/index by 8 because each slot is represented by a bit. Doing so will give me the  byte where the bit is located. Then I right shifted the bit to the last bit in the byte and check if it is set (1). If it is set (1), then the slot is used.
+ 
+For the iterator, I used an ArrayList to store tuples in non-empty slots. Then I converted the ArrayList to its unmodified version. 
+
+
+#HeapFile
+
+I used RandomAccessFile to access the heap file in disk because it allows me to read and write pages at arbitrary offsets. 
+
+For the iterator, I implemented a new class called HeapFileIterator that implements DbFileIterator. It accepts transaction id, table id, and number of pages as arguments in the constructor. 
+
+Table id and transaction id are needed to get the pages from buffer pool, while the number of pages allows us to iterate all the pages as we look for tuples.
+
+Also we make sure that the iterator has to be opened before it can be used.
+
+
+#SeqScan
+
+SeqScan simply accesses the file iterator I implemented in HeapFileIterator to iterate the tuples within pages. HeapFileIterator will automatically look for tuples in new pages if the current page does not have any more tuples. This level of abstraction allows SeqScan implementation to be very simple and straightforward as it does not have to worry about the internal implementation of the tuples. 
+
+
